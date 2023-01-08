@@ -143,6 +143,17 @@ def checkOut(GameName, player):
         except TypeError:
             return True
 
+def findTotalTroops(GameName, player):
+    with  openDB("database.db") as db:
+        returned = db.execute(f"SELECT Troops FROM {GameName} WHERE Occupier = '{player}'")
+        returned = returned.fetchall()
+        total = 0
+        for i in returned:
+            total += int(i[0])
+        return total
+
+        
+
 
 #newGame('normal',["Bob","Frank"])
 #changeOccupant("Madagascar", "Bob")

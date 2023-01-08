@@ -47,12 +47,15 @@ class sliderWindow(QWidget):
         self.button.clicked.connect(self.enter)
         self.layout.addWidget(self.button,4,1,1,1)
         self.setLayout(self.layout)
+        self.value = 0
         
         
 
     def enter(self):
-        return self.slider.value()
+        self.value = self.slider.value()
         
+    def getValue(self):
+        return self.value
 
     def ValueChange(self,value):
         try:
@@ -62,7 +65,11 @@ class sliderWindow(QWidget):
         self.label = QLabel(str(value))
         self.layout.addWidget(self.label,3,1,1,1)
         self.setLayout(self.layout)
-
+        
+'''app = QApplication(sys.argv)
+w = sliderWindow('your hand','china',10,'attack')
+w.show()
+app.exec()'''
  
 
 
@@ -154,44 +161,56 @@ class GameWindow(game.Game):
 
         except FileNotFoundError:
             pass
-    def inputNumber(self,country1,country2,max):
-        
-        while True:
-            pass
+
 
 
 
     def MainLoop(self):
         self.doNames()
         countryselect = None
+        
         while countryselect != "Ocean":
+            
             self.docircles()
             pygame.display.update()
             events = pygame.event.get()
+            currentInputs = []
             for event in events:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     
                     mouseX,mouseY = pygame.mouse.get_pos()
                     colourClick = str(self.screen.get_at((mouseX,mouseY))).strip("()")
                     countryselect = (self._colourDict[colourClick])[0]
-                    print(countryselect)
 
                     if event.type == pygame.QUIT:
-                        pygame.quit()         
-                    elif self.NextInput() == 'num':
+                        pygame.quit()       
+                    self.HandleClick(countryselect)  
+                    if self.NextInput() == 'num':
                         Country1, Country2, Max, Phase = self.getSliderInfo()
-                        app = QApplication(sys.argv)
-                        self.w = sliderWindow(Country1,Country2,Max,Phase)
-                        self.w.show()
-                        
-                        
+
+                        self.window = sliderWindow(Country1,Country2,int(Max),Phase)
+                        self.window.show()
                     else:
-                        self.HandleClick(countryselect)
+                        currentInputs.append(countryselect)
+
+            try:
+                value = self.window.getValue()
+                if value != 0:
+                    currentInputs.append(countryselect)
+                    value = 0
+                    self.window.close()
+                    
+            except:
+                print(currentInputs)
+
+
+                
+            
 
 
 
                           
-    
+app = QApplication(sys.argv)
 x = GameWindow(['bill','agua'],'normal',0,0,'athma')
 x.MainLoop()
 
