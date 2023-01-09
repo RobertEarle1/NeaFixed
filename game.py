@@ -89,9 +89,11 @@ class Map:
 
 
     def ModifyOccupiers(self,aggressor,attackloss,destination,defenceloss):    #writes to the occupiers
-        DBM.changeOccupant(self._gameName,destination, DBM.findOccupant(self._gameName,aggressor))
-        DBM.changeTroops(self._gameName,aggressor,(DBM.findTroops(self._gameName,aggressor)-attackloss))
-        DBM.changeTroops(self._gameName,destination, (DBM.findTroops(self._gameName,destination)-defenceloss))
+        if defenceloss> DBM.findTroops(self._gameName,destination):
+            DBM.changeOccupant(self._gameName,destination, DBM.findOccupant(self._gameName,aggressor))
+        else:
+            DBM.changeTroops(self._gameName,aggressor,(DBM.findTroops(self._gameName,aggressor)-attackloss))
+            DBM.changeTroops(self._gameName,destination, (DBM.findTroops(self._gameName,destination)-defenceloss))
 
 
 
@@ -119,7 +121,7 @@ class Game(Map):
     def addPlayer(self,player:object):
         self._Players.append(player)
         
-    def attackremains(self,attacker,attackforce,defender,defenceforce):
+    def Attack(self,attacker,attackforce,defender,defenceforce):
         annhilation = False
         count = 0
         while annhilation == False:
@@ -167,31 +169,31 @@ class Game(Map):
         
 
     def Deploy(self,howMany,country):
-            current = DBM.findTroops(self._gameName,country)
-            DBM.changeTroops(self._gameName,country,current+howMany)
+        current = DBM.findTroops(self._gameName,country)
+        DBM.changeTroops(self._gameName,country,current+howMany)
+        self._hands[self._CurrPlayer] -= howMany
 
-
-    def Attack(self,player):
-        Over = False
-        print(f"{chr(10)}{chr(10)}{chr(10)}{chr(10)} Attack Phase")
-        while Over == False:
-            if self.gametype == 'terminal':
-                attack = input("(attacker, agressor) or x x x")
+    def depthFirstSearch(self,country1,country2):
+        adjacencies = self.findinfo('adjacencies',country1)
+        for country in adjacencies:
+            if country == country2:
+                return True
             else:
-                #attack = GUI.GetInput('attack')
-                pass
-
-            attacker, defender, force = attack.split(" ")
-            defenceforce = DBM.findTroops(self._gameName,defender)
-            if attack == 'x x x':
-                Over = True
-            else:
-                if self.checkadjacent(attacker,defender) and self.checkenough(attacker,force):    
-                    self.attackremains(attacker,force,defender,defenceforce)
-
+                adjacencies.append(self.findinfo('adjacencies',country))
+        return False
+        
    
-    def Fortify(player):
-        pass
+    def Fortify(self,country1,country2,Quantity):
+        if self.depthFirstSearch(country1,country2):
+            DBM.changeTroops(DBM.findTroops(self._gameName,country1)-Quantity)
+            DBM.changeTroops(DBM.findTroops(self._gameName,country1)+Quantity)
+            return True
+        else:
+            return False
+            
+
+        
+            
 
         
     
@@ -204,19 +206,10 @@ class Game(Map):
     def getPlayer(self):
         return self._CurrPlayer
     
-    def NextPhase(self):
-        self._CurrPhase+=1
-        self._CurrPhase = self._Phases(self._CurrPhase)
+
 
     def NextPlayer(self):
-        self._CurrPlayer = self._Players[self._CurrPlayer+1]
-
-
-    
-
-    def initiatePlayer(self,name):
-        NewPlayer = Player(name)
-        self.addPlayer(NewPlayer)
+        self._CurrPlayer = (self._CurrPlayer+1)%len(self._Players)
 
 
     
@@ -231,57 +224,64 @@ class Game(Map):
         return "GetInputNum"
     
     def getSliderInfo(self):
-        if len(self.inputs) == 2:
-            return self.inputs[0],self.inputs[1], DBM.findTroops(self._gameName, self.inputs[0]), self.getPhase()
-        else:
-            return 'your hand', self.inputs[0], self.GetHandAmount(), self.getPhase()
+        temp = self.inputs
+        self.inputs = []
+        phase = self.getPhase()
+        if  phase == 'Attack':
+            return temp[0],temp[1], DBM.findTroops(self._gameName, temp[0]), phase
+        elif phase == 'Deployment':
+            return 'your hand', temp[0], self.GetHandAmount(), self.getPhase()
+        elif phase == 'Fortification':
+            return temp[0], temp[1], DBM.findTroops(self._gameName,temp[0])-1, self.getPhase()
         
 
     def HandleClick(self,userInput):
         phase = self.getPhase()
-        
         if phase == "Attack":
-            if len(self.inputs) ==2:
-                self.Attack()
-
             if len(self.inputs) == 1:
                 if DBM.findOccupant(self._gameName,userInput) != self._Players[self._CurrPlayer]:
-                    self.nextInput = 'num'
+                    self.nextInput = 'num1'
                     self.inputs.append(userInput)
-                    print(f'{userInput} is attack')
-                
+
             if len(self.inputs) == 0:
                 self.nextInput = None
                 if DBM.findOccupant(self._gameName,userInput) == self._Players[self._CurrPlayer]:
                     self.inputs.append(userInput)
-                    print(f'{userInput} is defend')
-
 
         elif phase == "Fortification":
             if DBM.findOccupant(self._gameName,userInput) == self._Players[self._CurrPlayer]:
-                if len(self.inputs) == 1:
+                if len(self.inputs) == 2:
                     self.nextInput = 'num'
+
                 self.inputs.append(userInput)
-                print(f'fortifying {userInput}')
+
         else:
             if DBM.findOccupant(self._gameName,userInput) == self._Players[self._CurrPlayer]:
                 print(f'deploying to {userInput}')
                 self.inputs.append(userInput)
                 self.nextInput = 'num'
-                print('slider')
+
+  
         
 
     def NextInput(self):
         return self.nextInput
 
     def ChangePhase(self):
-        self._CurrPhase +=1
+        self._CurrPhase = (self._CurrPhase + 1)%3
         if self._Phases[self._CurrPhase] == "Deployment":
-            self._CurrPlayer+=1
+            self.NextPlayer()
             self.DeploymentStart()
         
+        
+    def UseInputs(self,inputs):
+        if self.getPhase() == "Deployment":
+            self.Deploy(inputs[1],inputs[0])
+        elif self.getPhase()== "Attack":
+            pass
 
-
+            
+        
 
             
             

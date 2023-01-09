@@ -46,6 +46,19 @@ def newGame(GameName:str,countries:list, gametype: str,players : list):
 def MoveOnPhase(GameName,nextPlayer,nextPhase,Players):
     with  openDB("database.db") as db:
         db.execute(f"UPDATE GAMELOADSTATS SET Phase = {nextPhase},Playerturn = {nextPlayer}, Players = {Players} WHERE Gamename = {GameName}")
+
+#######################
+#### CLASS A SKILL ####
+##### MERGE SORT ######
+#######################
+
+
+#######################
+#### CLASS A SKILL ###
+# RECURSIVE FUNCTION  #
+#######################
+
+
 def mergeReverseSort(alist):  
     if len(alist)>1:
         middle = len(alist)//2
@@ -109,8 +122,7 @@ def changeOccupant(GameName, Country, newOccupier):
 def changeTroops(GameName, Country,NewTroops):
     with  openDB("database.db") as db:
         db.execute( f"UPDATE {GameName} SET Troops = '{str(NewTroops)}' WHERE CountryName = '{Country}'")
-        db.execute(f"UPDATE {GameName} SET TIMESAVED = '{str(datetime.datetime.now())}") #this line updates the game's the timestamp on every move
-
+        db.execute(f"UPDATE GAMES SET LastSaved = '{str(datetime.datetime.now())}' WHERE GameName = '{GameName}' ") #this line updates the game's the timestamp on every move
 
 
 def findTroops(GameName, Country):

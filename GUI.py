@@ -75,8 +75,8 @@ app.exec()'''
 
 class GameWindow(game.Game):
 
-    HEIGHT = 1200
-    WIDTH = 650
+    HEIGHT = 2000
+    WIDTH = 600
     WINDOW_SIZE = (HEIGHT,WIDTH)
     SKIP =  "S"     #these will be hotkeys
     QUIT = "Q"
@@ -91,10 +91,9 @@ class GameWindow(game.Game):
         pygame.init()
         self.screen = pygame.display.set_mode((self.WINDOW_SIZE[0], self.WINDOW_SIZE[1]),pygame.RESIZABLE)
         pygame.display.set_caption("RISK")
+        self.screen.fill('White')
         self._TextLocations = self.findinfo('text')
-
         self._colourDict = self.findinfo('colour')
-
         self._circleLocations = self.findinfo('circles')
         self._colourList = [(255,0,0),(0,255,0),(0,0,255),(255,255,0),(255,0,255),(0,255,255)]
 
@@ -110,8 +109,8 @@ class GameWindow(game.Game):
         currentPlayer = []
 
 
-    def dotext(self,text:str,locationx:int,locationy:int):        
-        font1 = pygame.font.SysFont('freesanbold.ttf', 15)
+    def dotext(self,text:str,locationx:int,locationy:int,size:int = 15):        
+        font1 = pygame.font.SysFont('freesanbold.ttf', size)
         text1 = font1.render(text, True, (0, 0, 0))   
         textRect1 = text1.get_rect()
         textRect1.center = int(locationx), int(locationy)
@@ -149,7 +148,16 @@ class GameWindow(game.Game):
                    [int(self._circleLocations[Country][0]), int(self._circleLocations[Country][1])], 10, 0)
             self.dotext(str(DBM.findTroops(self.GameName,Country)),self._circleLocations[Country][0], self._circleLocations[Country][1])
                 
+    def doPlayers(self):
+        for i in range(len(self._Players)):
+            self.dotext(self._Players[i],1280,500 + 50*i,40)
+            colour = self._circleColours[self._Players[i]]
+            pygame.draw.circle(self.screen, colour,[1380,500 + 50*i],20)
 
+    
+    def doTurn(self):
+        self.dotext(f'TURN: {self._Players[self._CurrPlayer]}',1300, 100,50)
+        
 
     def __loadMap(self):
         try:
@@ -167,10 +175,12 @@ class GameWindow(game.Game):
 
     def MainLoop(self):
         self.doNames()
+        self.doTurn()
         countryselect = None
+        self.doPlayers()
         
         while countryselect != "Ocean":
-            
+            print(self._Phases[self._CurrPhase])
             self.docircles()
             pygame.display.update()
             events = pygame.event.get()
@@ -181,27 +191,74 @@ class GameWindow(game.Game):
                     mouseX,mouseY = pygame.mouse.get_pos()
                     colourClick = str(self.screen.get_at((mouseX,mouseY))).strip("()")
                     countryselect = (self._colourDict[colourClick])[0]
-
-                    if event.type == pygame.QUIT:
-                        pygame.quit()       
-                    self.HandleClick(countryselect)  
-                    if self.NextInput() == 'num':
-                        Country1, Country2, Max, Phase = self.getSliderInfo()
-
-                        self.window = sliderWindow(Country1,Country2,int(Max),Phase)
-                        self.window.show()
-                    else:
+                    if countryselect != 'Surrender' and countryselect != 'Ocean' and countryselect != 'NextPhase':
                         currentInputs.append(countryselect)
+                        print(currentInputs)
 
-            try:
-                value = self.window.getValue()
+                        if event.type == pygame.QUIT:
+                            pygame.quit()       
+                        self.HandleClick(countryselect) 
+
+                        if self.NextInput() == 'num':
+                            Country1, Country2, Max, Phase = self.getSliderInfo()
+                            self.window = sliderWindow(Country1,Country2,int(Max),Phase)
+                            self.window.show()
+
+                        elif self.NextInput() =='num1':
+                            Country1, Country2, Max, Phase = self.getSliderInfo()
+                            self.window = sliderWindow(Country1,Country2,int(Max),'attack')
+                            self.window2 = sliderWindow(Country2,Country1,DBM.findTroops(self.GameName,Country2),'defend')
+                            self.window.show()
+                            self.window2.show()
+                elif countryselect == 'Surrender':
+                    pass #WRITE SURRENDER CODE
+                elif countryselect == 'NextPhase':
+                    currentInputs = []
+                    self.ChangePhase()
+                    countryselect = None
+
+            if self.NextInput() == "num":
+                try:
+                    value = self.window.getValue()
+                except:
+                    value = 0
                 if value != 0:
                     currentInputs.append(countryselect)
-                    value = 0
-                    self.window.close()
+                    currentInputs.append(value)
+                    self.window = None
+                    print(currentInputs)
+                    if self._Phases[self._CurrPhase] == 'Fortification':
+                        if len(currentInputs) == 2:
+                            if self.depthFirstSearch(currentInputs[0],currentInputs[1]):
+                                self.Fortify(currentInputs[0],currentInputs[1],currentInputs[2])
+                            else:
+                                currentInputs = []
+                    if self._Phases[self._CurrPhase] == 'Deployment':
+                        self.Deploy(currentInputs[1],currentInputs[0])
                     
-            except:
-                print(currentInputs)
+                    currentInputs = []
+                    self.ChangePhase()
+                    value = 0 
+            else:
+                try:
+                    value1 = None
+                    value2 = None
+                    value1 = self.window.getValue()
+                    value2 = self.window2.getValue()
+                    if value1 and value2!=None:
+                        self.Attack(Country1,value1,Country2,value2)
+                        self.window = None
+                        self.window2 = None
+                        currentInputs = []
+                    
+                except:
+                    pass
+                
+                
+            
+
+ 
+ 
 
 
                 
@@ -209,10 +266,6 @@ class GameWindow(game.Game):
 
 
 
-                          
-app = QApplication(sys.argv)
-x = GameWindow(['bill','agua'],'normal',0,0,'athma')
-x.MainLoop()
 
 class JoinGame(QWidget):
     def __init__(self,Username:str):
@@ -346,6 +399,19 @@ class PassNPlayWindow(QWidget):
         self.close()
         self.w = SignUpWindow(self.UsernameList)
         self.w.show()
+    
+
+class HelpWindow(QWidget):
+   def __init__(self):
+        super().__init__()
+
+        self.layout = QVBoxLayout()
+        self.label = QLabel("RISK: THE RULES: RULES WILL BE INSERTED HERE CLOSER TO GAME COMPLETION\nRISK: THE RULES: RULES WILL BE INSERTED HERE CLOSER TO GAME COMPLETION\nRISK: THE RULES: RULES WILL BE INSERTED HERE CLOSER TO GAME COMPLETION\nRISK: THE RULES: RULES WILL BE INSERTED HERE CLOSER TO GAME COMPLETION\nRISK: THE RULES: RULES WILL BE INSERTED HERE CLOSER TO GAME COMPLETION\nRISK: THE RULES: RULES WILL BE INSERTED HERE CLOSER TO GAME COMPLETION\nRISK: THE RULES: RULES WILL BE INSERTED HERE CLOSER TO GAME COMPLETION\n")
+
+        self.layout.addWidget(self.label)
+        self.setWindowTitle("Help")
+        self.setLayout(self.layout)
+
 
 
 class MainMenu(QWidget):
@@ -377,9 +443,6 @@ class MainMenu(QWidget):
         layout.addWidget(LoadpassNplay)
 
 
-        settings = QPushButton("Settings")
-        settings.clicked.connect(self.dosettings)
-        layout.addWidget(settings)
 
 
         help = QPushButton("Help")
@@ -398,8 +461,6 @@ class MainMenu(QWidget):
         pass
 
 
-    def dosettings(self):
-        pass
     
     def LoadpassNPlay(self):
         self.w = LoadPassNPlayWindow(self.Username)
@@ -411,8 +472,9 @@ class MainMenu(QWidget):
         self.w.show()
         self.close()
 
-    def dohelp():
-        pass
+    def dohelp(self):
+        self.w = HelpWindow()
+        self.w.show()
 
 
 class LoginWindow(QWidget):
