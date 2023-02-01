@@ -26,26 +26,87 @@ def myHasher():
 
 with openDB("database.db") as db:
     db.execute(f"CREATE TABLE IF NOT EXISTS GAMES (GameName TEXT, LastSaved TEXT, UserName TEXT)")
-    db.execute(f"CREATE TABLE IF NOT EXISTS GAMELOADSTATS (Gamename TEXT, Phase TEXT, PlayerTurn TEXT, Players TEXT)")
-    db.execute(f"CREATE TABLE IF NOT EXISTS UserNamePassword (UserName TEXT,Password TEXT, Salt, TEXT)")
+    db.execute(f"CREATE TABLE IF NOT EXISTS GAMELOADSTATS (Gamename TEXT, Phase TEXT, PlayerTurn TEXT, Players TEXT, Hands TEXT, MapType TEXT)")
+    db.execute(f"CREATE TABLE IF NOT EXISTS UserNamePassword (UserName TEXT,Password TEXT, Salt, TEXT, GamesWon TEXT, GamesPlayed TEXT)")
+
+
+def sethands(GameName, newHands):
+    with openDB("database.db") as db:
+        db.execute(f"UPDATE GAMELOADSTATS SET HANDS = ('{newHands}') WHERE Gamename = '{GameName}' ")
+
+def nextPlayer(GameName,nextPlayer:int):
+    with  openDB("database.db") as db:
+        db.execute(f"UPDATE GAMELOADSTATS SET PlayerTurn = {nextPlayer} WHERE Gamename = '{GameName}'")
+        db.execute(f"UPDATE GAMELOADSTATS SET Phase = 0")
+
+
+def MoveOnPhase(GameName,nextPhase:int,Players:list):
+    with  openDB("database.db") as db:
+        db.execute(f"UPDATE GAMELOADSTATS SET Phase = {nextPhase} WHERE Gamename = '{GameName}'")
+
+
+
+
 
 def newGame(GameName:str,countries:list, gametype: str,players : list):
     if gametype != None:
         with  openDB("database.db") as db:
-            db.execute(f"CREATE TABLE IF NOT EXISTS {GameName} (CountryName TEXT,Occupier TEXT,Troops INT(255))")
+            db.execute(f"CREATE TABLE IF NOT EXISTS '{GameName}' (CountryName TEXT,Occupier TEXT,Troops INT(255))")
             data = []
             for i in  countries:
                 data.append((i,players[randint(0,len(players)-1)], randint(2,5)))
-            db.executemany(f"INSERT INTO {GameName} VALUES(?,?,?)", data)
+            db.executemany(f"INSERT INTO '{GameName}' VALUES(?,?,?)", data)
+            hands = []
+            for i in players:
+                hands.append(30)
 
-            db.execute(f"INSERT INTO GAMELOADSTATS (Gamename,Phase,PlayerTurn,Players) VALUES(?,?,?,?)",(GameName,0,0,str(players)))
+                        
+            db.execute(f"INSERT INTO GAMELOADSTATS (Gamename,Phase,PlayerTurn,Players,Hands,MapType) VALUES(?,?,?,?,?,?)",(GameName,0,0,str(players),str(hands),gametype))
 
             for player in players:
                 db.execute(f"INSERT INTO GAMES (GameName,LastSaved,UserName) VALUES(?,?,?)",(GameName,str(datetime.datetime.now()),player))
+#newGame('billjoe',['alaska','thisplace','thatplace','wherever','franzville'],'normal',['a','b','c'])
 
-def MoveOnPhase(GameName,nextPlayer,nextPhase,Players):
-    with  openDB("database.db") as db:
-        db.execute(f"UPDATE GAMELOADSTATS SET Phase = {nextPhase},Playerturn = {nextPlayer}, Players = {Players} WHERE Gamename = {GameName}")
+def loadGame(GameName):
+    with openDB("database.db") as db:
+        details = db.execute(f"SELECT Phase,PlayerTurn,Players,MapType FROM GAMELOADSTATS WHERE Gamename = '{GameName}'")
+        details = details.fetchone()
+        return details
+    
+def getHands(GameName,player:int=None):
+    with openDB("database.db") as db:
+        hands = db.execute(f"SELECT Hands FROM GAMELOADSTATS WHERE Gamename = '{GameName}'").fetchone()
+        hands = hands[0]
+        hands = "".join(a for a in hands if a not in ["'","[","]"])
+        hands = hands.split(",")
+        hands = list(map(int,hands))
+        if player == None:
+            return hands
+        else:
+            return hands[player]
+
+def getPhase(GameName):
+    with openDB("database.db") as db:
+        phase = db.execute(f"SELECT Phase FROM GAMELOADSTATS WHERE Gamename = '{GameName}'").fetchone()
+        phase = phase[0]
+        phase = "".join(a for a in phase if a not in ["'","[","]"])
+        phase = int(phase)
+        return phase
+
+
+        
+def removeplayer(GameName,newHands:list,newPlayers:list):
+    with openDB("database.db") as db:
+
+        db.execute(f"UPDATE GAMELOADSTATS SET Players = ? WHERE Gamename = ?;",(str(newPlayers),GameName))
+        db.execute(f"UPDATE GAMELOADSTATS SET Hands = '{newHands}' WHERE Gamename = '{GameName}';")
+
+
+
+
+
+
+
 
 #######################
 #### CLASS A SKILL ####
@@ -85,6 +146,10 @@ def mergeReverseSort(alist):
             k+=1
 
 
+################################################
+# CLASS A SKILL: CROSS TABLE PARAMETERISED SQL #
+################################################
+
 def findplayergames(player):   #returns a time sorted list of games (most recent first)
     with  openDB("database.db") as db:
         gameName = db.execute(f"SELECT UsernamePassword.Username, GAMES.GameName, GAMES.LastSaved FROM UsernamePassword INNER JOIN GAMES ON GAMES.UserName=UsernamePassword.UserName")
@@ -115,7 +180,7 @@ def endGame(GameName):
 
 def changeOccupant(GameName, Country, newOccupier):
     with  openDB("database.db") as db:
-        db.execute(f"UPDATE { GameName} SET Occupier = '{newOccupier}' WHERE CountryName = '{Country}'")
+        db.execute(f"UPDATE '{GameName}' SET Occupier = '{str(newOccupier)}' WHERE CountryName = '{Country}'")
 
 
 
@@ -164,11 +229,20 @@ def findTotalTroops(GameName, player):
             total += int(i[0])
         return total
 
-        
+def splitPlayerTroops(GameName:str,surrplayer:int,players:list):
+    with openDB("database.db") as db:
+        territories = db.execute(f"SELECT CountryName FROM {GameName} WHERE Occupier = '{players[surrplayer]}'").fetchall()
+        counter = 0
+        players.pop(surrplayer)
+        for country in territories:
+            print(country[0])
+            changeOccupant(GameName,country[0],players[counter])
+            counter=(counter+1)%len(players)
+
 
 
 #newGame('normal',["Bob","Frank"])
-#changeOccupant("Madagascar", "Bob")
+#changeOccupant("aj","Madagascar", "Bob")
 #changeTroops("Madagascar",7)
 #endGame()
 
@@ -217,5 +291,6 @@ def SignIn(UserName, PasswordTest):
     except:
         return False
 
-#SignUp('hacker','1')
-#newGame('a','normal',['hacker','bill'])
+def findplayers(gameName):
+    players = db.execute(f"SELECT Players FROM GAMELOADSTATS WHERE Gamename = '{gameName}'").fetchone()
+    return players
