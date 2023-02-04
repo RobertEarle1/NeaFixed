@@ -89,7 +89,7 @@ class Game(Map):
         else:
             self._hands = []
             for i in self._players:
-                self._hands.append(0)
+                self._hands.append(8)
         self._Phases = ["Deployment","Attack","Fortification"]
         self._CurrPlayer = currPlayer
         self._CurrPhase = phase
@@ -119,7 +119,7 @@ class Game(Map):
 
         
     def Attack(self,attacker,attackforce,defender):
-
+        self.countrySelectList = []
         startAttackForce = attackforce
     
         
