@@ -8,8 +8,7 @@ class Map:
         self._gameName = gameName
         self._map = map
 
-    def getcountries(self):
-        return self._countries
+
 
 
     def strDictTupleDict(self,givenDict):
@@ -25,7 +24,6 @@ class Map:
 
 
     def findinfo(self,whatinfo:str,country:str='Alaska'):
-        print(self._map)
         if self._map =="Regular":
             with open('normal.txt', 'r') as f:
                 dict = (json.loads(f.read()))
@@ -55,7 +53,6 @@ class Map:
         elif whatinfo == 'circles':
             return self.strDictTupleDict(dict[3])
         elif whatinfo == 'countries':
-            pass
             return mapinfo.keys()
             
 
@@ -78,6 +75,21 @@ class Map:
         #print(self.findinfo('adjacencies',country1))
         if country2 in self.findinfo('adjacencies',country1):
             return True
+    
+    def depthFirstSearch(self,country1,country2):
+        adjacencies = self.findinfo('adjacencies',country1)
+        searched = []
+        occupier = DBM.findOccupant(self._gameName,country1)
+        for country in adjacencies:
+            if country == country2:
+                return True
+            else:
+                searched.append(country)
+                for adj in self.findinfo('adjacencies',country):
+                    if adj not in searched:
+                        if DBM.findOccupant(self._gameName, adj) == occupier:
+                            adjacencies.append(adj)
+
    
 
 class Game(Map):
@@ -97,9 +109,7 @@ class Game(Map):
         self._gamemap = gamemap
         self.currInputs = []
         self.nextInput = 0
-        if restarted == False:
-            #print(self.findinfo('countries'))
-            DBM.newGame(self._gameName,self.findinfo('countries'),self._gamemap,self._players)
+
 
 
     def findplayers(self):
@@ -115,11 +125,17 @@ class Game(Map):
         self._hands.pop(playerindex)
         DBM.splitPlayerTroops(self._gameName,playerindex,self._players)
         DBM.removeplayer(self._gameName,self._hands,self._players)
+        DBM.increaseLoss(player)
         
 
+    def winner(self):
+        DBM.increaseWon(self._players[0])
+        DBM.endGame(self._gameName)
+
+
         
-    def Attack(self,attacker,attackforce,defender):
-        self.countrySelectList = []
+    def Attack(self,attacker,defender,attackforce):
+        print('attacking with',attackforce)
         startAttackForce = attackforce
     
         
@@ -128,8 +144,9 @@ class Game(Map):
         ####### CLASS A SKILL #######
         ###### LIST OPERATIONS ######
         #############################
-        defenceforce = DBM.findTroops(self._gameName,defender)
 
+        defenceforce = DBM.findTroops(self._gameName,defender)
+        countrySelectList = []
         while defenceforce != 0 and attackforce != 0: 
 
             IndividualDefender = randint(1,6)
@@ -138,13 +155,15 @@ class Game(Map):
                 attackforce -= 1
             else:
                 defenceforce -=1
-
-        DBM.changeTroops(self._gameName,attacker,DBM.findTroops(self._gameName,attacker)-(startAttackForce-attackforce))
+        attackloss = startAttackForce-attackforce
+    
+        DBM.changeTroops(self._gameName,attacker,DBM.findTroops(self._gameName,attacker)-(attackloss))
         if defenceforce == 0:
             DBM.changeOccupant(self._gameName,defender,DBM.findOccupant(self._gameName,attacker))
             DBM.changeTroops(self._gameName,defender,0)
-            self.countrySelectList = []
             return attackforce
+        
+
         
         
         
@@ -161,13 +180,15 @@ class Game(Map):
         return self._hands[self._CurrPlayer]
         
 
-    def Deploy(self,howMany,country):
+    def Deploy(self,filler,country,howMany):
+        print(country,howMany)
         current = DBM.findTroops(self._gameName,country)
         DBM.changeTroops(self._gameName,country,current+howMany)
         self._hand = DBM.getHands(self._gameName,self._CurrPlayer) - howMany
         self._hands[self._CurrPlayer] -= howMany
         DBM.sethands(self._gameName,self._hands)
         self.ChangePhase()
+        print('deployed')
     
     ##########################
     ##### CLASS A SKILL ######
@@ -176,28 +197,23 @@ class Game(Map):
 
 
 
-    def depthFirstSearch(self,country1,country2):
-        adjacencies = self.findinfo('adjacencies',country1)
-        for country in adjacencies:
-            if country == country2:
-                return True
-            else:
-                adjacencies.append(self.findinfo('adjacencies',country))
-        return False
-        
+
    
+    
+
     def Fortify(self,country1,country2,Quantity):
         if self.depthFirstSearch(country1,country2):
-            DBM.changeTroops(DBM.findTroops(self._gameName,country1)-Quantity)
-            DBM.changeTroops(DBM.findTroops(self._gameName,country1)+Quantity)
+            DBM.changeTroops(self._gameName,country1,DBM.findTroops(self._gameName,country1)-Quantity)
+            DBM.changeTroops(self._gameName,country2,DBM.findTroops(self._gameName,country2)+Quantity)
+            self.countrySelect = None
+            self.countSelectList = []
             self.ChangePhase()
             
+    def Invade(self,country1,country2,number,remains):
+        DBM.changeTroops(self._gameName,country1,DBM.findTroops(self._gameName,country1)+remains-number)
+        DBM.changeTroops(self._gameName,country2,DBM.findTroops(self._gameName,country2)+number)
 
-        
-            
 
-        
-    
     def addPlayer(self,NewPlayer):
         self._players.append(NewPlayer)
     
@@ -212,15 +228,6 @@ class Game(Map):
         
         
 
-
-    
-
-    def checkInput(self,input): 
-        if self.Players[self.CurrPlayer].getName() == self.findOccupant(self._gameName,input):
-            return True
-        else:
-            return False
-
  
     def getPlayerHand(self):
         return DBM.getHands(self._gameName,self._CurrPlayer)
@@ -233,8 +240,7 @@ class Game(Map):
         if DBM.findOccupant(self._gameName,country) == player:
             return True
         else:
-            print(DBM.findOccupant(self._gameName,country))
-
+            pass
 
     def NextInput(self):
         return self.nextInput

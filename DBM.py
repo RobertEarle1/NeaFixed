@@ -27,7 +27,7 @@ def myHasher():
 with openDB("database.db") as db:
     db.execute(f"CREATE TABLE IF NOT EXISTS GAMES (GameName TEXT, LastSaved TEXT, UserName TEXT)")
     db.execute(f"CREATE TABLE IF NOT EXISTS GAMELOADSTATS (Gamename TEXT, Phase TEXT, PlayerTurn TEXT, Players TEXT, Hands TEXT, MapType TEXT)")
-    db.execute(f"CREATE TABLE IF NOT EXISTS UserNamePassword (UserName TEXT,Password TEXT, Salt, TEXT, GamesWon TEXT, GamesPlayed TEXT)")
+    db.execute(f"CREATE TABLE IF NOT EXISTS UserNamePassword (UserName TEXT,Password TEXT, Salt, TEXT, GamesWon TEXT, GamesLost TEXT)")
 
 
 def sethands(GameName, newHands):
@@ -44,10 +44,20 @@ def MoveOnPhase(GameName,nextPhase:int,Players:list):
     with  openDB("database.db") as db:
         db.execute(f"UPDATE GAMELOADSTATS SET Phase = {nextPhase} WHERE Gamename = '{GameName}'")
 
-
-
-
-
+def findStats(User):
+    with openDB("database.db") as db:
+        return db.execute(f"SELECT GamesLost,GamesWon FROM UserNamePassword WHERE UserName = '{User}' ").fetchone()
+    
+def increaseLoss(User):
+    with openDB("database.db") as db:
+        gamesLost =  db.execute(f"SELECT GamesLost FROM UserNamePassword WHERE UserName = '{User}' ").fetchone()[0]
+        db.execute(f"UPDATE UserNamePassword SET GamesLost = {int(gamesLost)+1} WHERE UserName = '{User}'")
+        
+def increaseWon(User):
+    with openDB("database.db") as db:
+        gamesLost =  db.execute(f"SELECT GamesWon FROM UserNamePassword WHERE UserName = '{User}' ").fetchone()[0]
+        db.execute(f"UPDATE UserNamePassword SET GamesWon = {int(gamesLost)+1} WHERE UserName = '{User}'")
+        
 def newGame(GameName:str,countries:list, gametype: str,players : list):
     if gametype != None:
         with  openDB("database.db") as db:
@@ -58,9 +68,7 @@ def newGame(GameName:str,countries:list, gametype: str,players : list):
             db.executemany(f"INSERT INTO '{GameName}' VALUES(?,?,?)", data)
             hands = []
             for i in players:
-                hands.append(30)
-
-                        
+                hands.append(8)
             db.execute(f"INSERT INTO GAMELOADSTATS (Gamename,Phase,PlayerTurn,Players,Hands,MapType) VALUES(?,?,?,?,?,?)",(GameName,0,0,str(players),str(hands),gametype))
 
             for player in players:
@@ -97,11 +105,9 @@ def getPhase(GameName):
         
 def removeplayer(GameName,newHands:list,newPlayers:list):
     with openDB("database.db") as db:
-
         db.execute(f"UPDATE GAMELOADSTATS SET Players = ? WHERE Gamename = ?;",(str(newPlayers),GameName))
         db.execute(f"UPDATE GAMELOADSTATS SET Hands = '{newHands}' WHERE Gamename = '{GameName}';")
-
-
+        
 
 
 
@@ -174,7 +180,9 @@ def findplayergames(player):   #returns a time sorted list of games (most recent
 
 def endGame(GameName):
     with  openDB("database.db") as db:
-        db.execute(f"DROP TABLE { GameName};")
+        db.execute(f"DROP TABLE {GameName};")
+        db.execute(f"DELETE FROM GAMELOADSTATS WHERE Gamename = '{GameName}' ")
+        db.execute(f"DELETE FROM GAMES WHERE GameName = '{GameName}'")
 
 
 
@@ -269,7 +277,7 @@ def SignUp(UserName, Password):
 
         
         except: 
-            db.execute(f"INSERT INTO UsernamePassword (UserName, Password, Salt) VALUES (?,?,?) ",(UserName,cypherpassword2,salt))
+            db.execute(f"INSERT INTO UsernamePassword (UserName, Password, Salt,GamesLost,GamesWon) VALUES (?,?,?,0,0) ",(UserName,cypherpassword2,salt))
             return True
 
 
