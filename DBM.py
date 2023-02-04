@@ -65,7 +65,7 @@ def newGame(GameName:str,countries:list, gametype: str,players : list):
 
             for player in players:
                 db.execute(f"INSERT INTO GAMES (GameName,LastSaved,UserName) VALUES(?,?,?)",(GameName,str(datetime.datetime.now()),player))
-#newGame('billjoe',['alaska','thisplace','thatplace','wherever','franzville'],'normal',['a','b','c'])
+#newGame('billjoe',['alaska','thisplace','thatplace','wherever','franzville'],'Regular',['a','b','c'])
 
 def loadGame(GameName):
     with openDB("database.db") as db:
@@ -193,9 +193,9 @@ def changeTroops(GameName, Country,NewTroops):
 def findTroops(GameName, Country):
     with  openDB("database.db") as db:
         returned = db.execute(f"SELECT Troops FROM {GameName} WHERE CountryName = '{Country}'")
-        returned= returned.fetchone()
-        returned = returned[0]
-    return returned
+        returned = returned.fetchone()
+        
+    return returned[0]
 
 
 
@@ -204,8 +204,10 @@ def findOccupant(GameName, Country):
     with  openDB("database.db") as db:
         returned = db.execute(f"SELECT Occupier FROM {GameName} WHERE CountryName = '{Country}'")
         returned= returned.fetchone()
-        returned = returned[0]
-    return returned
+    try:
+        return returned[0]
+    except TypeError:
+        pass
 
 
 
@@ -229,6 +231,7 @@ def findTotalTroops(GameName, player):
             total += int(i[0])
         return total
 
+
 def splitPlayerTroops(GameName:str,surrplayer:int,players:list):
     with openDB("database.db") as db:
         territories = db.execute(f"SELECT CountryName FROM {GameName} WHERE Occupier = '{players[surrplayer]}'").fetchall()
@@ -241,7 +244,7 @@ def splitPlayerTroops(GameName:str,surrplayer:int,players:list):
 
 
 
-#newGame('normal',["Bob","Frank"])
+#newGame('Regular',["Bob","Frank"])
 #changeOccupant("aj","Madagascar", "Bob")
 #changeTroops("Madagascar",7)
 #endGame()

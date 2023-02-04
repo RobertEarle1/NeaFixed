@@ -25,21 +25,29 @@ class Map:
 
 
     def findinfo(self,whatinfo:str,country:str='Alaska'):
-        if self._map =="normal":
+        print(self._map)
+        if self._map =="Regular":
             with open('normal.txt', 'r') as f:
                 dict = (json.loads(f.read()))
                 mapinfo = dict[0]
                 countryvalues = mapinfo[country]
                 countryvalues = countryvalues.split(' ')
-                value = countryvalues[0]
-                adjacencies = countryvalues.remove(value)
+                value = countryvalues.pop(0)
+        else:
+            with open('simplified.txt', 'r') as f:
+                dict = (json.loads(f.read()))
+                mapinfo = dict[0]
+                countryvalues = mapinfo[country]
+                countryvalues = countryvalues.split(' ')
+                value = countryvalues.pop(0)
+                
 
         if whatinfo == 'value':
             return value
         elif whatinfo == 'adjacencies':
-            return adjacencies
+            return countryvalues
         elif whatinfo == "all":
-            return value,adjacencies
+            return value,countryvalues
         elif whatinfo == "text":
             return self.strDictTupleDict(dict[1])
         elif whatinfo == "colour":
@@ -50,7 +58,7 @@ class Map:
             pass
             return mapinfo.keys()
             
-        
+
 
 
     
@@ -67,33 +75,13 @@ class Map:
 
 
     def checkadjacent(self,country1,country2):
+        #print(self.findinfo('adjacencies',country1))
         if country2 in self.findinfo('adjacencies',country1):
             return True
    
 
-
-
-    def checkenough(self,country,force):
-        if force < DBM.findTroops(self._gameName, country):
-            return True
-
-
-      
-
-
-
-
-    def ModifyOccupiers(self,aggressor,attackloss,destination,defenceloss):    #writes to the occupiers
-        if defenceloss> DBM.findTroops(self._gameName,destination):
-            DBM.changeOccupant(self._gameName,destination, DBM.findOccupant(self._gameName,aggressor))
-        else:
-            DBM.changeTroops(self._gameName,aggressor,(DBM.findTroops(self._gameName,aggressor)-attackloss))
-            DBM.changeTroops(self._gameName,destination, (DBM.findTroops(self._gameName,destination)-defenceloss))
-
-
-
 class Game(Map):
-    def __init__(self,players,gamemap:str,currPlayer:int=0,phase:str=0,gameName:str = None,restarted:bool = False):
+    def __init__(self,players,gamemap:str,currPlayer:int=0,phase:str=0,gameName:str = None,restarted:bool = False,gameMode:str = None):
         super().__init__(gamemap,players,gameName)
         self._players = players
         if restarted:
@@ -101,7 +89,7 @@ class Game(Map):
         else:
             self._hands = []
             for i in self._players:
-                self._hands.append(30)
+                self._hands.append(0)
         self._Phases = ["Deployment","Attack","Fortification"]
         self._CurrPlayer = currPlayer
         self._CurrPhase = phase
@@ -130,45 +118,37 @@ class Game(Map):
         
 
         
-    def Attack(self,attacker,attackforce,defender,defenceforce):
-        annhilation = False
-        count = 0
-        while annhilation == False:
-            winner = False
-            attackarray = []
-            defencearray = []
+    def Attack(self,attacker,attackforce,defender):
 
-            ############################
-            ####### CLASS A SKILL #######
-            ###### LIST OPERATIONS ######
-            #############################
+        startAttackForce = attackforce
+    
+        
 
-            for i in range(attackforce):
-                attackarray.append(randint(1,6))
-            for i in range(defenceforce):
-                defencearray.append(randint(1,6))  
-            attackarray.sort(reverse=True)
-            defencearray.sort(reverse=True)  
+        #############################
+        ####### CLASS A SKILL #######
+        ###### LIST OPERATIONS ######
+        #############################
+        defenceforce = DBM.findTroops(self._gameName,defender)
 
-            while winner == False:
-                    if attackarray[count] > defencearray[count]:
-                        defenceforce -=1 #kill a defender
-                        if defenceforce <= 0:
-                            annhilation = 'attack win'
-                            winner = True
-                    elif defencearray[count] > attackarray[count]:
-                        attackforce -=1
-                        if attackforce <= 0:
-                            annhilation = 'defence win'
-                            winner = True
-                    elif defencearray[count] == attackarray[count]:
-                        attackforce -=1
-                        if attackforce <= 0:
-                            annhilation = 'defence win'
-                            winner = True          
-        attackloss = attackforce - len(attackarray)
-        defenceloss = defenceforce - len(defencearray)
-        self.ModifyOccupiers(attacker, attackloss, defender, defenceloss) # completes the ModifyOccupiers function for its map
+        while defenceforce != 0 and attackforce != 0: 
+
+            IndividualDefender = randint(1,6)
+            IndividualAttacker = randint(1,6)
+            if IndividualDefender >= IndividualAttacker:
+                attackforce -= 1
+            else:
+                defenceforce -=1
+
+        DBM.changeTroops(self._gameName,attacker,DBM.findTroops(self._gameName,attacker)-(startAttackForce-attackforce))
+        if defenceforce == 0:
+            DBM.changeOccupant(self._gameName,defender,DBM.findOccupant(self._gameName,attacker))
+            DBM.changeTroops(self._gameName,defender,0)
+            self.countrySelectList = []
+            return attackforce
+        
+        
+        
+
 
     def DeploymentStart(self):
         Player = self._players[self._CurrPlayer]
@@ -187,6 +167,7 @@ class Game(Map):
         self._hand = DBM.getHands(self._gameName,self._CurrPlayer) - howMany
         self._hands[self._CurrPlayer] -= howMany
         DBM.sethands(self._gameName,self._hands)
+        self.ChangePhase()
     
     ##########################
     ##### CLASS A SKILL ######
@@ -209,9 +190,7 @@ class Game(Map):
         if self.depthFirstSearch(country1,country2):
             DBM.changeTroops(DBM.findTroops(self._gameName,country1)-Quantity)
             DBM.changeTroops(DBM.findTroops(self._gameName,country1)+Quantity)
-            return True 
-        else:
-            return False
+            self.ChangePhase()
             
 
         
@@ -231,6 +210,7 @@ class Game(Map):
     def NextPlayer(self):
         self._CurrPlayer = (self._CurrPlayer+1)%len(self._players)
         
+        
 
 
     
@@ -241,48 +221,20 @@ class Game(Map):
         else:
             return False
 
-    def requestNumber(self):
-        return "GetInputNum"
+ 
+    def getPlayerHand(self):
+        return DBM.getHands(self._gameName,self._CurrPlayer)
+        
     
-    def getSliderInfo(self):
-        temp = self.currInputs
-        self.currInputs = []
-        phase = self._Phases[DBM.getPhase(self._gameName)]
-        if  phase == 'Attack' :
-            return temp[0],temp[1], DBM.findTroops(self._gameName, temp[0]), phase
-        elif phase == 'Deployment':
-            return 'your hand', temp[0], DBM.getHands(self._gameName,self._CurrPlayer), phase
-        elif phase == 'Fortification':
-            return temp[0], temp[1], DBM.findTroops(self._gameName,temp[0])-1, phase
-        
+    def getCountryTroops(self,country):
+        return DBM.findTroops(self._gameName, country)
 
-    def HandleClick(self,userInput):
-        phase = DBM.getPhase(self._gameName)
-        if phase == "Attack":
-            if len(self.currInputs) == 1:
-                if DBM.findOccupant(self._gameName,userInput) != self._players[self._CurrPlayer]:
-                    self.nextInput = 'AttackInputs'
-                    self.currInputs.append(userInput)
-
-            if len(self.currInputs) == 0:
-                self.nextInput = None
-                if DBM.findOccupant(self._gameName,userInput) == self._players[self._CurrPlayer]:
-                    self.currInputs.append(userInput)
-
-        elif phase == "Fortification":
-            if DBM.findOccupant(self._gameName,userInput) == self._players[self._CurrPlayer]:
-                if len(self.currInputs) == 2:
-                    self.nextInput = 'DepFort'
-
-                self.currInputs.append(userInput)
-
+    def checkBelongs(self,country,player):
+        if DBM.findOccupant(self._gameName,country) == player:
+            return True
         else:
-            if DBM.findOccupant(self._gameName,userInput) == self._players[self._CurrPlayer]:
-                self.currInputs.append(userInput)
-                self.nextInput = 'DepFort'
+            print(DBM.findOccupant(self._gameName,country))
 
-  
-        
 
     def NextInput(self):
         return self.nextInput
@@ -295,12 +247,9 @@ class Game(Map):
             self.DeploymentStart()
         
         
-    def UseInputs(self,inputs):
-        phase = DBM.getPhase(self._gameName)
-        if phase == "Deployment":
-            self.Deploy(inputs[1],inputs[0])
-        elif phase == "Attack":
-            pass
+
+    def getTroops(self,country):
+        return DBM.findTroops(self._gameName,country)
 
             
         

@@ -8,16 +8,19 @@ import sys
 from PyQt6.QtWidgets import QApplication, QWidget, QLineEdit, QPushButton, QLabel, QGridLayout, QSizePolicy, QVBoxLayout,QSlider,QComboBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
+from numpy import random
+import Networking
 
     
 class sliderWindow(QWidget):
-    def __init__(self,country1:str,country2:str,max:int,phase:str):
+    def __init__(self,country1:str,country2:str,max:int,phase:str,defenceSize:int = 0):
         super().__init__()
+        self.defenceSize = defenceSize
         self.layout = QGridLayout()
         self.slider = QSlider(Qt.Orientation.Horizontal, self)
         self.slider.setGeometry(50,50, 200, 50)
         self.slider.setMinimum(0)
-        self.slider.setMaximum(max)
+        self.slider.setMaximum(max) #max
         self.slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.slider.setTickInterval(2)
         self.slider.valueChanged[int].connect(self.ValueChange)
@@ -32,11 +35,15 @@ class sliderWindow(QWidget):
         self.setLayout(self.layout)
         self.value = 0
 
+
+
     def enter(self):
         self.value = self.slider.value()
+        self.close()
         
     def getValue(self):
         return self.value
+
 
     def ValueChange(self,value):
         try:
@@ -55,10 +62,8 @@ class sliderWindow(QWidget):
 
 class GameWindow(game.Game):
 
-
-    
-    def __init__(self,players:list,gameMap:str='normal',currPlayer:int = 0, phase:int = 0, gameName:str = None,restarted : bool = False):
-        super().__init__(players,gameMap,currPlayer,phase,gameName,restarted)
+    def __init__(self,players:list,gameMap:str='Regular',currPlayer:int = 0, phase:int = 0, gameName:str = None,restarted : bool = False,gameMode:str = None):
+        super().__init__(players,gameMap,currPlayer,phase,gameName,restarted,gameMode)
         self.WINDOW_SIZE = (2000,600)
         self.GameName = gameName
         self._players = players
@@ -70,7 +75,7 @@ class GameWindow(game.Game):
         self._colourDict = self.findinfo('colour')
         self._circleLocations = self.findinfo('circles')
         self._colourList = [(250,0,0),(0,250,0),(0,0,250),(255,250,0),(250,0,255),(0,205,255),(80,205,255),(125,205,40)]
-
+       
 
 
 
@@ -134,9 +139,13 @@ class GameWindow(game.Game):
 
 
     def __loadMap(self):
+        if self._gamemap == 'Regular':
+            file = "map.png"
+        else:
+            file = "HexMap.png"
         try:
             time.sleep(1)
-            icon = pygame.image.load("map.png").convert()
+            icon = pygame.image.load(file).convert()
             self.screen.blit(icon,(0,0))
             pygame.display.flip()
             pygame.display.set_icon(icon)
@@ -144,15 +153,57 @@ class GameWindow(game.Game):
         except FileNotFoundError:
             pass
 
+    def GuiDeploy(self,deployCountry):
+        try:
+            value = self.w.getValue()
+        except:
+            value = 0
+   
+
+        if value > 0:
+            self.Deploy(value,deployCountry)
+            self.w = None
+            value = 0
+
+    def GuiAttack(self,country1,country2):
+        
+        attackNum = self.Attackwindow.value
+        
+        if attackNum>0:
+            invasion = self.Attack(country1,attackNum,country2)
+            
+            if invasion != None:
+                self.InvasionWindow = sliderWindow(country1,country2,invasion-1,'to invade')
+                self.InvasionWindow.show()
+                
 
 
+        else:
+            return [country1,country2]
+    
+    def GuiInvade(self,country1,country2):
+        if self.InvasionWindow.value != 0:
+            print(self.InvasionWindow.value)
+            print(country1)
+            DBM.changeTroops(self.GameName,country1,DBM.findTroops(self.GameName,country1)-self.InvasionWindow.value)
+
+            DBM.changeTroops(self.GameName,country2,self.InvasionWindow.value)
+            print('done')
+
+            
+
+    def GuiFortify(self,country1,country2):
+        pass
 
     def MainLoop(self):
         self.doNames()
         self.doTurn()
         countryselect = None
         self.doPlayers()
+        self.countrySelectList = []
+        print(self._hands)
         
+    
         
         
         while len(self._players) > 1:
@@ -163,12 +214,11 @@ class GameWindow(game.Game):
             self.doTurn()
             self.doPhase()
             self.doPlayers()
+            self.DeploymentStart()
             pygame.display.update()
             events = pygame.event.get()
-            self.currInputs = []
-            
+
             for event in events:
-                
                 if event.type == pygame.MOUSEBUTTONDOWN:
        
                     mouseX,mouseY = pygame.mouse.get_pos()
@@ -178,83 +228,102 @@ class GameWindow(game.Game):
                     except:
                         pass
 
-                    if countryselect != 'Surrender' and countryselect != 'Ocean' and countryselect != 'NextPhase':
-                        self.currInputs.append(countryselect)
-                    
-                        if event.type == pygame.QUIT:
-                            pygame.quit()       
-                        self.HandleClick(countryselect) 
 
-                        if self._Phases[self._CurrPhase] in ['Deployment','Fortification'] and len(self.currInputs) == 1:
-                            Country1, Country2, Max, Phase = self.getSliderInfo()
-                            self.window = sliderWindow(Country1,Country2,int(Max),Phase)
-                            print(Country1,Country2,int(Max),Phase)
-                            self.window.show()
+                    if countryselect == 'Surrender':
+
+                        self.removePlayer(self._players[self._CurrPlayer])
+                        self.countrySelectList = []
+                        countryselect = None
+                    
+                    
+                    elif countryselect == 'NextPhase':
+                        self.countrySelectList = []
+                        self.ChangePhase()
+                        countryselect = None
+
+
+                    
+                    elif self._Phases[self._CurrPhase] == 'Attack':
+                        if len(self.countrySelectList) == 0:
+                            if self.checkBelongs(countryselect,self._players[self._CurrPlayer]):
+                                self.countrySelectList.append(countryselect)
+
+                        elif len(self.countrySelectList) ==1:
+                            if not self.checkBelongs(countryselect,self._players[self._CurrPlayer]):
+                                self.countrySelectList.append(countryselect)
+                                print(self.countrySelectList)
+                                self.Attackwindow = sliderWindow(self.countrySelectList[0],self.countrySelectList[1],DBM.findTroops(self._gameName,self.countrySelectList[0]),'Attack',DBM.findTroops(self._gameName,self.countrySelectList[1]))
+                                self.Attackwindow.show()
+                                
+                                
+                
+                            
+                    elif self._Phases[self._CurrPhase]  == 'Fortification':
+
+                        if len(self.countrySelectList) == 0:
+                            if self.checkBelongs(countryselect,self._players[self._CurrPlayer]):
+                                self.countrySelectList.append(countryselect)
+
+                        elif len(self.countrySelectList) == 1:
+                            if self.checkBelongs(countryselect,self._players[self._CurrPlayer]) : #and self.checkadjacent(self.countrySelectList[0],countryselect)
+                                self.countrySelectList.append(countryselect)
+                                
+
+
+
+                    
+                    elif self._Phases[self._CurrPhase]  == 'Deployment' and  self.checkBelongs(countryselect,self._players[self._CurrPlayer]):
+                        self.w = sliderWindow(countryselect,'your hand',self.getPlayerHand(),self._Phases[self._CurrPhase])
+                        self.w.show()
+                        self.countrySelectList = []
+
+                    elif self._Phases[self._CurrPhase] == 'Fortification' and len(self.countrySelectList) == 2:
+                        print('yes')
+                        self.w = sliderWindow(self.countrySelectList[0],self.countrySelectList[1],DBM.findTroops(self._gameName,self.countrySelectList[0])-1,self._Phases[self._CurrPhase])
+                        self.w.show()
+                        self.countrySelectList = []
+                                
+                                
+                if self._Phases[self._CurrPhase] == 'Deployment':
+                    self.GuiDeploy(countryselect)
+                    self.countrySelectList = []
+
+                if self._Phases[self._CurrPhase] == 'Attack':
+                    try:
+                        agressor = self.countrySelectList[1]
+                        self.GuiAttack(self.countrySelectList[0],self.countrySelectList[1])
+
+                    except:
+                        try:
+                            self.GuiInvade(countryselect,agressor)
+                            countryselect = None
+                            agressor = None
+                            self.InvasionWindow = None
+                        except:
+                            pass
+
+
+                    
+                
+                if self._Phases[self._CurrPhase] == 'Fortification' and len(self.countrySelectList) == 2:
+                    print(self.countrySelectList,"Fortify")
+                    self.GuiFortify(self.countrySelectList[0],self.countrySelectList[1])
+                    self.countrySelectList = []
+                
+
                             
 
-                        elif self._Phases[self._CurrPhase] == 'Attack' and len(self.currInputs) == 2:
-                            Country1, Country2, Max, Phase = self.getSliderInfo()
-                            self.window = sliderWindow(Country1,Country2,int(Max),'attack')
-                            self.window2 = sliderWindow(Country2,Country1,DBM.findTroops(self.GameName,Country2),'defend')
-                            self.window.show()
-                            self.window2.show()
+                    
+                    
+
+
 
     
-                elif countryselect == 'Surrender':
-
-                    self.removePlayer(self._players[self._CurrPlayer])
-                    self.currInputs = []
-                    countryselect = None
-               
-               
-                elif countryselect == 'NextPhase':
-                    self.currInputs = []
-                    self.ChangePhase()
-                    countryselect = None
-
-            if self._Phases[self._CurrPhase] == "DepFort":  #try to get value from window/s
-                try:
-                    value = self.window.getValue()
-                except:
-                    value = 0
-                if value != 0:
-                    self.currInputs.append(countryselect)
-                    self.currInputs.append(value)
-                    self.window = None
-                    if self._Phases[self._CurrPhase] == 'Fortification':
-                        if len(self.currInputs) == 2:
-                            if self.depthFirstSearch(self.currInputs[0],self.currInputs[1]):
-                                self.Fortify(self.currInputs[0],self.currInputs[1],self.currInputs[2])
-                            
-                            else:
-                                self.currInputs = []
-                    elif self._Phases[self._CurrPhase] == 'Deployment':
-                        self.Deploy(self.currInputs[1],self.currInputs[0])
-                   
-                    self.currInputs = []
-                    self.ChangePhase()
-                    value = 0 
+                        
                     
-            else:
-                try:
-                    value1 = None
-                    value2 = None
-                    value1 = self.window.getValue()
-                    value2 = self.window2.getValue()
-                    if value1 and value2!=None:
-                        self.Attack(Country1,value1,Country2,value2)
-                        self.window = None
-                        self.window2 = None
-                        self.currInputs = []
-                    
-                except:
-                    pass
-        print(f'winner {self._players[0]}')
-                
-            
 
- 
- 
+    
+    
 
 
                 
@@ -291,11 +360,14 @@ class JoinGame(QWidget):
 
     def Connect(self):
         IP = self.lineEdits['Host IP'].text()
-        print(IP)
+        self.Conn = Networking.Networking()
+        self.Conn.joinHost(IP)
+        
 
 class GameCreate(QWidget):
-    def __init__(self,UsernameList:list):
+    def __init__(self,UsernameList:list,connection:object = None):
         super().__init__()
+        self.connection = connection
         self.UsernameList = UsernameList
         self.window_width, self.window_height = 600, 200
         self.setFixedSize(self.window_width, self.window_height)
@@ -308,6 +380,17 @@ class GameCreate(QWidget):
         self.lineEdits['GameName'] = QLineEdit()
         layout.addWidget(labels['GameName'],            0, 0, 1, 1)
         layout.addWidget(self.lineEdits['GameName'],    0, 1, 1, 3)
+
+        self.combobox1 = QComboBox()
+        self.combobox1.addItems(['Regular','simplified'])
+
+        self.combobox2 = QComboBox()
+        self.combobox2.addItems(['Regular','Fog of war'])
+        
+        layout.addWidget(self.combobox1)
+        layout.addWidget(self.combobox2)
+
+
 
         button = QPushButton("CREATE")
         button.clicked.connect(self.CreateGame)
@@ -322,7 +405,7 @@ class GameCreate(QWidget):
 
     def CreateGame(self):
         gameName = self.lineEdits['GameName'].text()
-        self.thisGame = GameWindow(self.UsernameList,'normal',0,0,gameName)
+        self.thisGame = GameWindow(self.UsernameList,self.combobox1.currentText(),0,0,gameName,False,self.combobox2.currentText())
         self.thisGame.MainLoop()
         self.close()
 
@@ -420,6 +503,41 @@ class HelpWindow(QWidget):
         self.setWindowTitle("Help")
         self.setLayout(self.layout)
 
+class HostGame(QWidget):
+    def __init__(self,hostName):
+        super().__init__()
+        self.hostName = hostName
+        self.Connection = Networking.Networking()
+        self.Connection.configureHost()
+        self.layout = QGridLayout()
+        self.label = QLabel(f"IP: {self.Connection.TCP_IP}")
+        self.layout.addWidget(self.label)
+        self.setWindowTitle("HostGame")
+        self.setLayout(self.layout)
+        button = QPushButton("Back")
+        button.clicked.connect(self.hostBack)
+        self.layout.addWidget(button,                  2, 1, 1, 1)
+        button2 = QPushButton("Listen")
+        button2.clicked.connect(self.waitForJoin)
+        self.layout.addWidget(button2,                  2, 0, 1, 1)
+
+
+
+    def hostBack(self):
+        self.Connection.exit()
+        self.w = MainMenu(self.hostName)
+        self.w.show()
+        self.close()
+
+    def waitForJoin(self):
+        self.Connection.recieveConnection()
+        connName = self.Connection.listenForMessage()
+        self.w = GameCreate([self.hostName,connName],self.Connection)
+        self.w.show()
+        self.close()
+        
+
+       
 
 
 class MainMenu(QWidget):
@@ -439,7 +557,7 @@ class MainMenu(QWidget):
         layout.addWidget(joingamebutton)
 
         hostgamebutton = QPushButton("Host Online")
-        hostgamebutton.clicked.connect(self.creategame)
+        hostgamebutton.clicked.connect(self.hostgame)
         layout.addWidget(hostgamebutton)
 
         passNplay = QPushButton("New Pass 'n play")
@@ -465,8 +583,10 @@ class MainMenu(QWidget):
         self.close()
         
 
-    def creategame(self):
-        pass
+    def hostgame(self):
+        self.w = HostGame(self.Username)
+        self.w.show()
+        self.close()
 
 
     
@@ -662,6 +782,7 @@ class SignUpSignIn(QWidget):
         button1.clicked.connect(self.signup)
         layout.addWidget(button1)
 
+
     def login(self):
         self.w = LoginWindow()
         self.w.show()
@@ -674,17 +795,12 @@ class SignUpSignIn(QWidget):
         self.close()
 
 
-class UI():
-    def __init__(self):
-        self.Username = None
-        self.prevWindows = []
-    
-    def createLoginWindow(self):
-        pass
 
 
 
 app = QApplication(sys.argv)
+#w = GameWindow(['1','2','3','4','5'],'Regular',0,0,'tahoo',True) #SignUpSignIn()
 w = SignUpSignIn()
+#w.MainLoop()
 w.show()
 app.exec()
